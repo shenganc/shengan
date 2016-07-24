@@ -30,13 +30,13 @@
                 timeout = setTimeout(delayed, threshold || 100);
             };
         }
-        // smartresize
+        // smartresize 
         jQuery.fn[sr] = function(fn){  return fn ? this.bind('resize', debounce(fn)) : this.trigger(sr); };
 
     })(jQuery,'smartresize');
 
     (function(){
-
+        
         var scrollbarWidth = 0, originalMargin, touchHandler = function(event){
             event.preventDefault();
         };
@@ -48,7 +48,7 @@
                 top : '-9999px',
                 width  : '50px',
                 height : '50px',
-                overflow : 'scroll',
+                overflow : 'scroll', 
                 position : 'absolute'
             }, function(property, value){
                 scrollDiv.style[property] = value;
@@ -97,6 +97,29 @@
                 $(this)[method]('mbr-navbar--stuck')
                     .not('.mbr-navbar--open')[method]('mbr-navbar--short');
             });
+        });
+
+        // .mbr-hamburger
+        $(document).on('add.cards change.cards', function(event){
+            $(event.target).outerFind('.mbr-hamburger:not(.mbr-added)').each(function(){
+                $(this).addClass('mbr-added')
+                    .click(function(){
+                        $(this)
+                            .toggleClass('mbr-hamburger--open')
+                            .parents('.mbr-navbar')
+                            .toggleClass('mbr-navbar--open')
+                            .removeClass('mbr-navbar--short');
+                    }).parents('.mbr-navbar').find('a:not(.mbr-hamburger)').click(function(){
+                        $('.mbr-hamburger--open').click();
+                    });
+            });
+        });
+        $(window).smartresize(function(){
+            if ($(window).width() > 991)
+                $('.mbr-navbar--auto-collapse .mbr-hamburger--open').click();
+        }).keydown(function(event){
+            if (27 == event.which) // ESC
+                $('.mbr-hamburger--open').click();
         });
 
         if ($.isMobile() && navigator.userAgent.match(/Chrome/i)){ // simple fix for Chrome's scrolling
@@ -150,9 +173,7 @@
             });
             $(document).on('add.cards change.cards', function(event){
                 $(event.target).outerFind('.mbr-parallax-background')
-                    .jarallax({
-                        speed: 0.6
-                    })
+                    .jarallax()
                     .css('position', 'relative');
             });
         }
@@ -211,6 +232,81 @@
             }, 650);
         });
 
+        // .mbr-google-map
+        var loadGoogleMap = function(){
+            var $this = $(this), markers = [], coord = function(pos){
+                return new google.maps.LatLng(pos[0], pos[1]);
+            };
+            var params = $.extend({
+                zoom       : 14,
+                type       : 'ROADMAP',
+                center     : null,
+                markerIcon : null,
+                showInfo   : true
+            }, eval('(' + ($this.data('google-map-params') || '{}') + ')'));
+            $this.find('.mbr-google-map__marker').each(function(){
+                var coord = $(this).data('coordinates');
+                if (coord){
+                    markers.push({
+                        coord    : coord.split(/\s*,\s*/),
+                        icon     : $(this).data('icon') || params.markerIcon,
+                        content  : $(this).html(),
+                        template : $(this).html('{{content}}').removeAttr('data-coordinates data-icon')[0].outerHTML
+                    });
+                }
+            }).end().html('').addClass('mbr-google-map--loaded');
+            if (markers.length){
+                var map = this.Map = new google.maps.Map(this, {
+                    scrollwheel : false,
+                    // prevent draggable on mobile devices
+                    draggable   : !$.isMobile(),
+                    zoom        : params.zoom,
+                    mapTypeId   : google.maps.MapTypeId[params.type],
+                    center      : coord(params.center || markers[0].coord)
+                });
+                $(window).smartresize(function(){
+                   var center = map.getCenter();
+                   google.maps.event.trigger(map, 'resize');
+                   map.setCenter(center); 
+                });
+                map.Geocoder = new google.maps.Geocoder;
+                map.Markers = [];
+                $.each(markers, function(i, item){
+                    var marker = new google.maps.Marker({
+                        map       : map,
+                        position  : coord(item.coord),
+                        icon      : item.icon,
+                        animation : google.maps.Animation.DROP
+                    });
+                    var info = marker.InfoWindow = new google.maps.InfoWindow();
+                    info._setContent = info.setContent;
+                    info.setContent = function(content){
+                        return this._setContent(content ? item.template.replace('{{content}}', content) : '');
+                    };
+                    info.setContent(item.content);
+                    google.maps.event.addListener(marker, 'click', function(){
+                        if (info.anchor && info.anchor.visible) info.close();
+                        else if (info.getContent()) info.open(map, marker);
+                    });
+                    if (item.content && params.showInfo){
+                        google.maps.event.addListenerOnce(marker, 'animation_changed', function(){
+                            setTimeout(function(){
+                                info.open(map, marker);
+                            }, 350);
+                        });
+                    }
+                    map.Markers.push(marker);
+                });
+            }
+        };
+        $(document).on('add.cards', function(event){
+            if (window.google && google.maps){
+                $(event.target).outerFind('.mbr-google-map').each(function(){
+                    loadGoogleMap.call(this);
+                });
+            }
+        });
+
         // embedded videos
         $(window).smartresize(function(){
             $('.mbr-embedded-video').each(function(){
@@ -244,7 +340,7 @@
                                 backgroundSize: 'cover',
                                 backgroundPosition: 'center'
                             })
-                        $('> *:eq(0)', this).before($img);
+                        $('.container:eq(0)', this).before($img);
 
                         $('<img>').on('load', function() {
                             if (120 == (this.naturalWidth || this.width)) {
@@ -266,7 +362,7 @@
 
                         if ($.fn.YTPlayer && !$.isMobile()){
                             var params = eval('(' + ($(this).data('bg-video-params') || '{}') + ')');
-                            $('> *:eq(1)', this).before('<div class="mbr-background-video"></div>').prev()
+                            $('.container:eq(0)', this).before('<div class="mbr-background-video"></div>').prev()
                                 .YTPlayer($.extend({
                                     videoURL : result[1],
                                     containment : 'self',
@@ -290,14 +386,20 @@
             $(document).click(function(e){
                 try {
                     var target = e.target;
+
+                    if ($(target).parents().hasClass('mbr-gallery')) {
+                        if ($(target).parents().hasClass('carousel') || $(target).parent().is('a')) {
+                            return;                            
+                        }
+                    }
                     do {
                         if (target.hash){
                             var useBody = /#bottom|#top/g.test(target.hash);
                             $(useBody ? 'body' : target.hash).each(function(){
                                 e.preventDefault();
-                                // in css sticky navbar has height 64px
+                                // in css sticky navbar has height 64px 
                                 var stickyMenuHeight = $('.mbr-navbar--sticky').length ? 64 : 0;
-                                var goTo = target.hash == '#bottom'
+                                var goTo = target.hash == '#bottom' 
                                         ? ($(this).height() - $(window).height())
                                         : ($(this).offset().top - stickyMenuHeight);
                                 $('html, body').stop().animate({
@@ -313,96 +415,17 @@
             });
         }
 
-        // init the same height columns
-        $('.cols-same-height .mbr-figure').each(function() {
-            var $imageCont = $(this)
-            var $img = $imageCont.children('img')
-            var $cont = $imageCont.parent()
-            var imgW = $img[0].width
-            var imgH = $img[0].height
-
-            function setNewSize() {
-                $img.css({
-                    width: '',
-                    maxWidth: '',
-                    marginLeft: ''
-                })
-
-                if(imgH && imgW) {
-                    var aspectRatio = imgH / imgW
-
-                    $imageCont.addClass({
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0
-                    })
-
-                    // change image size
-                    var contAspectRatio = $cont.height() / $cont.width()
-                    if(contAspectRatio > aspectRatio) {
-                        var percent = 100 * (contAspectRatio - aspectRatio) / aspectRatio;
-                        $img.css({
-                            width: percent + 100 + '%',
-                            maxWidth: percent + 100 + '%',
-                            marginLeft: (- percent / 2) + '%'
-                        })
-                    }
-                }
-            }
-
-            $img.one('load', function() {
-                imgW = $img[0].width
-                imgH = $img[0].height
-                setNewSize()
-            })
-
-            $(window).on('resize', setNewSize)
-            setNewSize()
-        })
-
     });
 
-
-    if (!$('html').hasClass('is-builder')){
-
-        $(document).ready(function() {
-
-            if ($.isMobile()) {
-                return;
-            }
-
-            else if ($('input[name=animation]').length) {
-
-                var animatedElements = $('p, h1, h2, h3, h4, h5, a, button, small, img, li, blockquote, .mbr-author-name, em, label, input, textarea, .input-group, .iconbox, .btn-social, .mbr-figure, .mbr-gallery, .mbr-slider, .mbr-map, .mbr-testimonial .card-block, .mbr-price-value, .mbr-price-figure').not(function(){
-                    return $(this).parents().is('.navbar, .mbr-arrow, footer, .iconbox, .mbr-slider, .mbr-gallery, .mbr-testimonial .card-block, #cookiesdirective');
-                });
-
-                animatedElements.addClass("hidden").viewportChecker({
-                    classToRemove: 'hidden',
-                    classToAddForFullView: '',
-                    classToAdd: 'visible animated fadeInUp',
-                    offset: 50,
-                    removeClassAfterAnimation: true
-                });
-
-                $('input[name=animation]').remove();
-            }
-
-        });
-
-        if ($('.navbar').length) {
-
-            $(".nav-dropdown").swipe({
-                swipeLeft:function(event, direction, distance, duration, fingerCount) {
-                    $('.navbar-close').click();
-                },
-            });
-
-        }
-
-
-    }
-
 })(jQuery);
+!function() {
+	document.getElementsByClassName('engine')[0].getElementsByTagName('a')[0].removeAttribute('rel');
+
+    if(!document.getElementById('top-1')) {
+        var e = document.createElement("section");
+        e.id = "top-1";
+        e.className = "engine";
+        e.innerHTML = '<a href="https://mobirise.com">mobirise.com</a> Mobirise v3.3';
+        document.body.insertBefore(e, document.body.childNodes[0]);
+    }
+}();
